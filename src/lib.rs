@@ -23,6 +23,36 @@ impl<K, V> HashMap<K, V> {
     }
 }
 
+pub struct OccupiedEntry<'a, K, V> {
+    element: &'a mut (K, V),
+}
+
+pub struct VacantEntry<'a, K, V> {
+    key: K,
+    bucket: &'a mut Vec<(K, V)>,
+}
+
+impl<'a, K, V> VacantEntry<'a, K, V> {
+    pub fn insert(self, value: V) -> &'a mut V {
+        self.bucket.push((self.key, value));
+        &mut self.bucket.last_mut().unwrap().1
+    }
+}
+
+pub enum Entry<'a, K, V> {
+    Occupied(OccupiedEntry<'a, K, V>),
+    Vacant(VacantEntry<'a, K, V>),
+}
+
+impl<'a, K, V> Entry<'a, K, V> {
+    pub fn or_insert(self, value: V) -> &'a mut V {
+        match self {
+            Entry::Occupied(e) => &mut e.element.1,
+            Entry::Vacant(e) => e.insert(value),
+        }
+    }
+}
+
 impl<K, V> HashMap<K, V>
 where
     K: Hash + Eq,
@@ -42,6 +72,10 @@ where
         }
         bucket.push((key, value));
         None
+    }
+
+    pub fn entry(&mut self, key: K) -> Entry<K, V> {
+        todo!()
     }
 
     pub fn get<Q>(&self, key: &Q) -> Option<&V>
@@ -173,6 +207,19 @@ where
     }
 }
 
+impl<K, V, const N: usize> From<[(K, V); N]> for HashMap<K, V>
+where
+    K: Hash + Eq,
+{
+    fn from(arr: [(K, V); N]) -> Self {
+        let mut map = HashMap::new();
+        for (k, v) in arr {
+            map.insert(k, v);
+        }
+        map
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -211,5 +258,28 @@ mod tests {
         }
 
         assert_eq!((&map).into_iter().count(), 4);
+    }
+
+    #[test]
+    fn index() {
+        let mut map = HashMap::new();
+        map.insert("a", 1);
+        assert_eq!(map["a"], 1)
+    }
+
+    #[test]
+    fn from() {
+        let map = HashMap::from([
+            ("Mercury", 0.4),
+            ("Venus", 0.7),
+            ("Earth", 1.0),
+            ("Mars", 1.5),
+        ]);
+
+        assert_eq!(map.get("abc"), None);
+        assert_eq!(map.get("Mercury"), Some(&0.4));
+        assert_eq!(map.get("Venus"), Some(&0.7));
+        assert_eq!(map.get("Earth"), Some(&1.0));
+        assert_eq!(map.get("Mars"), Some(&1.5));
     }
 }
