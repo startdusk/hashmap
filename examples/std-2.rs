@@ -2,7 +2,7 @@ extern crate hashmap;
 use hashmap::HashMap;
 
 fn main() {
-    let solar_distance = HashMap::from([
+    let _solar_distance = HashMap::from([
         ("Mercury", 0.4),
         ("Venus", 0.7),
         ("Earth", 1.0),
@@ -33,8 +33,8 @@ fn main() {
     *stat += random_stat_buff();
 
     // modify an entry before an insert with in-place mutation
-    player_stats
-        .entry("mana")
-        .and_modify(|mana| *mana += 200)
-        .or_insert(100);
+    // player_stats
+    //     .entry("mana")
+    //     .and_modify(|mana| *mana += 200)
+    //     .or_insert(100);
 }

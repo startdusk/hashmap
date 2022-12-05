@@ -9,6 +9,7 @@ use std::{
 
 const INITAL_NBUCKETS: usize = 1;
 
+#[derive(Debug)]
 pub struct HashMap<K, V> {
     buckets: Vec<Vec<(K, V)>>,
     items: usize,
@@ -24,18 +25,20 @@ impl<K, V> HashMap<K, V> {
 }
 
 pub struct OccupiedEntry<'a, K, V> {
-    element: &'a mut (K, V),
+    entry: &'a mut (K, V),
 }
 
 pub struct VacantEntry<'a, K, V> {
     key: K,
-    bucket: &'a mut Vec<(K, V)>,
+    map: &'a mut HashMap<K, V>,
+    position: usize,
 }
 
 impl<'a, K, V> VacantEntry<'a, K, V> {
     pub fn insert(self, value: V) -> &'a mut V {
-        self.bucket.push((self.key, value));
-        &mut self.bucket.last_mut().unwrap().1
+        self.map.buckets[self.position].push((self.key, value));
+        self.map.items += 1;
+        &mut self.map.buckets[self.position].last_mut().unwrap().1
     }
 }
 
@@ -47,8 +50,25 @@ pub enum Entry<'a, K, V> {
 impl<'a, K, V> Entry<'a, K, V> {
     pub fn or_insert(self, value: V) -> &'a mut V {
         match self {
-            Entry::Occupied(e) => &mut e.element.1,
+            Entry::Occupied(e) => &mut e.entry.1,
             Entry::Vacant(e) => e.insert(value),
+        }
+    }
+
+    pub fn or_default(self) -> &'a mut V
+    where
+        V: Default,
+    {
+        self.or_insert_with(Default::default)
+    }
+
+    pub fn or_insert_with<F>(self, maker: F) -> &'a mut V
+    where
+        F: FnOnce() -> V,
+    {
+        match self {
+            Entry::Occupied(e) => &mut e.entry.1,
+            Entry::Vacant(e) => e.insert(maker()),
         }
     }
 }
@@ -75,7 +95,22 @@ where
     }
 
     pub fn entry(&mut self, key: K) -> Entry<K, V> {
-        todo!()
+        if self.buckets.is_empty() || self.items > 3 * self.buckets.len() / 4 {
+            self.resize();
+        }
+        let position = self.position(&key);
+        for entry in &mut self.buckets[position] {
+            if entry.0 == key {
+                return Entry::Occupied(OccupiedEntry {
+                    entry: unsafe { &mut *(entry as *mut _) },
+                });
+            }
+        }
+        Entry::Vacant(VacantEntry {
+            key,
+            map: self,
+            position,
+        })
     }
 
     pub fn get<Q>(&self, key: &Q) -> Option<&V>
@@ -180,6 +215,43 @@ impl<'a, K, V> Iterator for Iter<'a, K, V> {
     }
 }
 
+pub struct IntoIter<K, V> {
+    map: HashMap<K, V>,
+    position: usize,
+}
+
+impl<K, V> Iterator for IntoIter<K, V> {
+    type Item = (K, V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.map.buckets.get_mut(self.position) {
+                Some(bucket) => match bucket.pop() {
+                    Some(x) => break Some(x),
+                    None => {
+                        self.position += 1;
+                        continue;
+                    }
+                },
+                None => break None,
+            }
+        }
+    }
+}
+
+impl<K, V> IntoIterator for HashMap<K, V> {
+    type Item = (K, V);
+
+    type IntoIter = IntoIter<K, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter {
+            map: self,
+            position: 0,
+        }
+    }
+}
+
 impl<'a, K, V> IntoIterator for &'a HashMap<K, V> {
     type Item = (&'a K, &'a V);
 
@@ -212,8 +284,17 @@ where
     K: Hash + Eq,
 {
     fn from(arr: [(K, V); N]) -> Self {
+        HashMap::from_iter(arr)
+    }
+}
+
+impl<K, V> FromIterator<(K, V)> for HashMap<K, V>
+where
+    K: Eq + Hash,
+{
+    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
         let mut map = HashMap::new();
-        for (k, v) in arr {
+        for (k, v) in iter {
             map.insert(k, v);
         }
         map
@@ -258,6 +339,19 @@ mod tests {
         }
 
         assert_eq!((&map).into_iter().count(), 4);
+
+        let mut items = 0;
+        for (k, v) in map {
+            match k {
+                "a" => assert_eq!(v, 1),
+                "b" => assert_eq!(v, 2),
+                "c" => assert_eq!(v, 3),
+                "d" => assert_eq!(v, 4),
+                _ => unreachable!(),
+            }
+            items += 1
+        }
+        assert_eq!(items, 4)
     }
 
     #[test]
