@@ -106,11 +106,19 @@ where
                 });
             }
         }
-        Entry::Vacant(VacantEntry {
-            key,
-            map: self,
-            position,
-        })
+        match self.buckets[position]
+            .iter()
+            .position(|&(ref ekey, _)| ekey == &key)
+        {
+            Some(index) => Entry::Occupied(OccupiedEntry {
+                entry: &mut self.buckets[position][index],
+            }),
+            None => Entry::Vacant(VacantEntry {
+                key,
+                map: self,
+                position,
+            }),
+        }
     }
 
     pub fn get<Q>(&self, key: &Q) -> Option<&V>
